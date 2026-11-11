@@ -91,3 +91,12 @@ export interface HandoverSectionData {
     dependencies: ItemRecord[];
   };
 }
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url?: string;
+  auth_provider: 'google' | 'local' | 'demo';
+  created_at: string;
+}

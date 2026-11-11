@@ -1,8 +1,38 @@
 # Trailmark — Changelog
 
-## [2.1.0] - 2026-11-11 (Slite Visual & UX Redesign)
+## [2.2.0] - 2026-11-11 (Branding, Public Landing, and Google OAuth)
 
 ### Added
+- **Product Identity & TM Branding:**
+  - Modern geometric **TM** monogram brandmark with light and dark mode responsiveness.
+  - Consistent branding across splash screen, header, sidebar, login, registration, and footer.
+- **Website Opening Experience — Splash Screen:**
+  - Center TM brandmark with subtle smooth scale animation and progress loader.
+  - Tagline: *"Turn project chaos into clear direction."*
+  - Session-aware display (renders once per session without blocking repeated navigation).
+- **Public Landing Page:**
+  - Hero section: *"Every Project Deserves a Clear Handover."* with primary and secondary CTAs.
+  - Interactive product dashboard preview illustration.
+  - About Trailmark section with 5-step visual workflow.
+  - Features grid covering the 6 extraction categories, evidence verification, and Markdown export.
+  - Asymmetric Trust Model visual process diagram.
+  - Development Team section for **Team ERROR404 / CodePuneThinkers**.
+  - Final call-to-action banner and public footer seal.
+- **Authentication & Google OAuth 2.0:**
+  - Sign-in page with "Continue with Google" button and email/password authentication.
+  - Registration page with Google sign-up and validation.
+  - 1-Click Judge Demo Sign-In (`alex.rivera@trailmark.internal`).
+  - Google OAuth configuration setup endpoint (`/api/auth/google/config`) and session verification.
+  - Password hashing with salted PBKDF2-SHA512.
+  - Signed session tokens with HMAC-SHA256 signature and 7-day expiration.
+  - Protected application routes with session recovery.
+  - Dedicated authentication test suite (`tests/test_auth.ts`, 14/14 tests passing).
+- **Authenticated Layout & Dashboard:**
+  - Slite-inspired vertical sidebar with user avatar, name, and logout action.
+  - Personalized time-aware greeting (*"Good morning / afternoon / evening, [User Name]"*).
+  - Quick action shortcuts (Create Project, Upload Sources, Start Handover, Review Queue).
+  - Recent activity stream tracking verification and extraction events.
+  - In-app Help & Documentation modal with Google OAuth setup instructions.
 - **Slite SaaS Shell:**
   - Minimalist collapsible left navigation sidebar (`Overview`, `Project Workspace`, `Review Queue`, `All Handovers`, `Sources & Chunks`, `Settings`).
   - Slite-inspired breadcrumb header with project selector and quick actions.

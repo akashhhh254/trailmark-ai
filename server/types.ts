@@ -88,3 +88,13 @@ export interface SecurityFinding {
   chunkId?: string;
   filename?: string;
 }
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string | null;
+  auth_provider: 'google' | 'local' | 'demo';
+  avatar_url?: string;
+  created_at: string;
+}

@@ -7,6 +7,7 @@ import {
   ItemRecord,
   ItemVersionRecord,
   SourceRecord,
+  UserRecord,
 } from './types';
 
 export class TrailmarkDatabase {
@@ -118,7 +119,63 @@ export class TrailmarkDatabase {
         created_at TEXT NOT NULL,
         FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
       );
+
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        password_hash TEXT,
+        auth_provider TEXT NOT NULL DEFAULT 'local',
+        avatar_url TEXT,
+        created_at TEXT NOT NULL
+      );
     `);
+  }
+
+  // --- User Operations ---
+  public createUser(user: UserRecord): UserRecord {
+    if (!this.db) throw new Error('DB uninitialized');
+    this.db.run(
+      `INSERT INTO users (id, email, name, password_hash, auth_provider, avatar_url, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        user.id,
+        user.email.toLowerCase(),
+        user.name,
+        user.password_hash || null,
+        user.auth_provider,
+        user.avatar_url || null,
+        user.created_at,
+      ]
+    );
+    this.saveToFile();
+    return user;
+  }
+
+  public getUserByEmail(email: string): UserRecord | null {
+    if (!this.db) throw new Error('DB uninitialized');
+    const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
+    stmt.bind([email.toLowerCase()]);
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as unknown as UserRecord;
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return null;
+  }
+
+  public getUserById(id: string): UserRecord | null {
+    if (!this.db) throw new Error('DB uninitialized');
+    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    stmt.bind([id]);
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as unknown as UserRecord;
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return null;
   }
 
   // --- Case Operations ---

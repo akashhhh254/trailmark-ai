@@ -15,23 +15,39 @@ import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { EditItemModal } from './components/EditItemModal';
 import { ManualApproveModal } from './components/ManualApproveModal';
 import { NewHandoverModal } from './components/NewHandoverModal';
+import { SplashScreen } from './components/SplashScreen';
+import { LandingPage } from './components/LandingPage';
+import { LoginPage } from './components/LoginPage';
+import { RegisterPage } from './components/RegisterPage';
+import { HelpModal } from './components/HelpModal';
 import {
   CaseRecord,
-  ExtractionCategory,
   HandoverSectionData,
   ItemRecord,
   SecurityFinding,
   SourceRecord,
+  UserRecord,
   VerificationMetrics,
 } from './types';
 import { CheckCircle2, ShieldAlert, X } from 'lucide-react';
 
 export default function App() {
-  // Navigation & Shell State
+  // Opening Splash Screen State (shown once per session)
+  const [showSplash, setShowSplash] = useState<boolean>(() => {
+    return !sessionStorage.getItem('tm_splash_seen');
+  });
+
+  // Top-Level Screen Routing: 'landing' | 'login' | 'register' | 'app'
+  const [currentScreen, setCurrentScreen] = useState<'landing' | 'login' | 'register' | 'app'>('landing');
+
+  // Authenticated User State
+  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
+
+  // App Navigation & Layout State
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Data State
+  // Project & Handover Data
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [currentCase, setCurrentCase] = useState<CaseRecord | null>(null);
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -41,6 +57,7 @@ export default function App() {
 
   // Modals & Drawers
   const [isNewHandoverOpen, setIsNewHandoverOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [selectedEvidenceItem, setSelectedEvidenceItem] = useState<ItemRecord | null>(null);
   const [isFullDrawerOpen, setIsFullDrawerOpen] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<ItemRecord | null>(null);
@@ -59,8 +76,9 @@ export default function App() {
     nextStep: string;
   } | null>(null);
 
-  // Initialize and check URL routing
+  // Check authentication session on mount
   useEffect(() => {
+    fetchSessionUser();
     fetchRecentCases();
 
     const path = window.location.pathname;
@@ -75,13 +93,31 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const fetchSessionUser = async () => {
+    try {
+      const token = localStorage.getItem('tm_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/auth/me', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setCurrentUser(data.user);
+          setCurrentScreen('app');
+        }
+      }
+    } catch {
+      // Quiet fallback
+    }
+  };
+
   const fetchRecentCases = async () => {
     try {
       const res = await fetch('/api/cases');
       if (res.ok) {
         const data = await res.json();
         setCases(data);
-        // If no case is selected yet, select the most recent one if available
         if (!currentCase && data.length > 0) {
           loadCaseDetails(data[0].id, false);
         }
@@ -111,6 +147,7 @@ export default function App() {
       }
       if (switchView) {
         setActiveTab('project');
+        setCurrentScreen('app');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -143,6 +180,7 @@ export default function App() {
       const data = await res.json();
       await fetchRecentCases();
       await loadCaseDetails(data.case.id, false);
+      setCurrentScreen('app');
       setActiveTab('review');
       showNotification('Loaded sample case: Aegis Pay Settlement Engine');
     } catch (err: unknown) {
@@ -150,7 +188,7 @@ export default function App() {
       setErrorMessage({
         title: 'Could Not Load Sample',
         details: message,
-        nextStep: 'Please check your connection or create a case manually.',
+        nextStep: 'Please check connection or create a case manually.',
       });
     } finally {
       setSampleLoading(false);
@@ -210,6 +248,7 @@ export default function App() {
 
       await fetchRecentCases();
       await loadCaseDetails(newCase.id, false);
+      setCurrentScreen('app');
       setActiveTab('project');
       showNotification('Created project case with sources ingested.');
     } catch (err: unknown) {
@@ -341,6 +380,7 @@ export default function App() {
         ...data.sections.dependencies,
       ];
       setItems(allSec);
+      setCurrentScreen('app');
       setActiveTab('handovers');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -362,6 +402,25 @@ export default function App() {
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2000);
     showNotification('Share link copied to clipboard');
+  };
+
+  // Authentication Handlers
+  const handleAuthSuccess = (user: UserRecord) => {
+    setCurrentUser(user);
+    setCurrentScreen('app');
+    showNotification(`Welcome, ${user.name}!`);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network error on logout
+    }
+    localStorage.removeItem('tm_token');
+    setCurrentUser(null);
+    setCurrentScreen('landing');
+    showNotification('Logged out successfully.');
   };
 
   // Handover Data Structure
@@ -388,8 +447,18 @@ export default function App() {
   }, [currentCase, items, sources]);
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] flex flex-col font-sans text-stone-900">
-      {/* Toast Notification */}
+    <>
+      {/* 1. Splash Screen on Initial Visit */}
+      {showSplash && (
+        <SplashScreen
+          onComplete={() => {
+            sessionStorage.setItem('tm_splash_seen', 'true');
+            setShowSplash(false);
+          }}
+        />
+      )}
+
+      {/* Floating Toast Notification */}
       {notification && (
         <div className="fixed bottom-5 right-5 z-50 bg-stone-900 text-white px-3.5 py-2 rounded-lg shadow-lg text-xs flex items-center gap-2 animate-in fade-in duration-150">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -397,166 +466,210 @@ export default function App() {
         </div>
       )}
 
-      {/* Main SaaS Shell: Sidebar + Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar
-          activeTab={activeTab}
-          onSelectTab={(tab) => {
-            setActiveTab(tab);
-            setSidebarOpen(false);
+      {/* 2. Public Landing Page */}
+      {currentScreen === 'landing' && (
+        <LandingPage
+          onGetStarted={() => {
+            if (currentUser) {
+              setCurrentScreen('app');
+            } else {
+              setCurrentScreen('login');
+            }
           }}
-          currentCase={currentCase}
-          cases={cases}
-          onSelectCase={(id) => loadCaseDetails(id, true)}
-          onNewHandover={() => setIsNewHandoverOpen(true)}
-          onLoadSample={handleLoadSample}
-          sampleLoading={sampleLoading}
-          isOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          onExploreDemo={handleLoadSample}
+          onLoginClick={() => setCurrentScreen('login')}
+          onRegisterClick={() => setCurrentScreen('register')}
         />
+      )}
 
-        {/* Right Main Column */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          {/* Top Breadcrumbs & Actions Bar */}
-          <TopNav
-            currentCase={currentCase}
-            activeTab={activeTab}
-            onSelectTab={(tab) => setActiveTab(tab)}
-            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-            onCopyShareLink={handleCopyShareLink}
-            shareCopied={shareCopied}
-          />
+      {/* 3. Login Page */}
+      {currentScreen === 'login' && (
+        <LoginPage
+          onLoginSuccess={handleAuthSuccess}
+          onNavigateToRegister={() => setCurrentScreen('register')}
+          onBackToLanding={() => setCurrentScreen('landing')}
+        />
+      )}
 
-          {/* Error Banner */}
-          {errorMessage && (
-            <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-4 w-full">
-              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-900 flex items-start justify-between gap-3 shadow-2xs">
-                <div className="flex items-start gap-2">
-                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-rose-950">{errorMessage.title}</h4>
-                    <p className="text-rose-700 mt-0.5">{errorMessage.details}</p>
-                    <p className="text-rose-900 font-medium mt-1">
-                      Next Step: {errorMessage.nextStep}
-                    </p>
+      {/* 4. Register Page */}
+      {currentScreen === 'register' && (
+        <RegisterPage
+          onRegisterSuccess={handleAuthSuccess}
+          onNavigateToLogin={() => setCurrentScreen('login')}
+          onBackToLanding={() => setCurrentScreen('landing')}
+        />
+      )}
+
+      {/* 5. Authenticated Application Workspace (Vertical Sidebar + Main Content) */}
+      {currentScreen === 'app' && (
+        <div className="min-h-screen bg-[#fafaf9] flex flex-col font-sans text-stone-900">
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Vertical Sidebar */}
+            <Sidebar
+              activeTab={activeTab}
+              onSelectTab={(tab) => {
+                setActiveTab(tab);
+                setSidebarOpen(false);
+              }}
+              currentCase={currentCase}
+              cases={cases}
+              onSelectCase={(id) => loadCaseDetails(id, true)}
+              onNewHandover={() => setIsNewHandoverOpen(true)}
+              onLoadSample={handleLoadSample}
+              sampleLoading={sampleLoading}
+              isOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+              currentUser={currentUser}
+              onOpenHelp={() => setIsHelpOpen(true)}
+              onLogout={handleLogout}
+            />
+
+            {/* Right Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+              <TopNav
+                currentCase={currentCase}
+                activeTab={activeTab}
+                onSelectTab={(tab) => setActiveTab(tab)}
+                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                onCopyShareLink={handleCopyShareLink}
+                shareCopied={shareCopied}
+              />
+
+              {/* Error Alert Banner */}
+              {errorMessage && (
+                <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-4 w-full">
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-900 flex items-start justify-between gap-3 shadow-2xs">
+                    <div className="flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-rose-950">{errorMessage.title}</h4>
+                        <p className="text-rose-700 mt-0.5">{errorMessage.details}</p>
+                        <p className="text-rose-900 font-medium mt-1">
+                          Next Step: {errorMessage.nextStep}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setErrorMessage(null)}
+                      className="text-rose-400 hover:text-rose-700 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => setErrorMessage(null)}
-                  className="text-rose-400 hover:text-rose-700 p-1"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              )}
+
+              {/* Views Routing */}
+              <div className="flex-1 pb-16">
+                {activeTab === 'dashboard' && (
+                  <DashboardView
+                    cases={cases}
+                    currentCase={currentCase}
+                    currentUser={currentUser}
+                    metrics={metrics}
+                    onSelectCase={(id) => loadCaseDetails(id, true)}
+                    onNewHandover={() => setIsNewHandoverOpen(true)}
+                    onLoadSample={handleLoadSample}
+                    sampleLoading={sampleLoading}
+                    onOpenReview={() => setActiveTab('review')}
+                    onOpenHandover={() => setActiveTab('handovers')}
+                    onOpenSources={() => setActiveTab('sources')}
+                  />
+                )}
+
+                {activeTab === 'project' && currentCase && (
+                  <ProjectWorkspaceView
+                    currentCase={currentCase}
+                    sources={sources}
+                    metrics={metrics}
+                    onRunExtraction={handleRunExtraction}
+                    extracting={extracting}
+                    onOpenReview={() => setActiveTab('review')}
+                    onOpenHandover={() => setActiveTab('handovers')}
+                    onOpenUploadModal={() => setIsNewHandoverOpen(true)}
+                  />
+                )}
+
+                {activeTab === 'review' && (
+                  <ReviewWorkspaceView
+                    items={items}
+                    metrics={metrics}
+                    onApproveItem={(item) => {
+                      if (item.verification === 'unverified') {
+                        setApprovingUnverifiedItem(item);
+                      } else {
+                        handleItemAction(item.id, 'approve');
+                      }
+                    }}
+                    onRejectItem={(id) => handleItemAction(id, 'reject')}
+                    onEditItem={(item) => setEditingItem(item)}
+                    onToggleConfidential={(id) => handleItemAction(id, 'confidential_toggle')}
+                    onViewHistory={(item) => setSelectedHistoryItem(item)}
+                    onApproveAllVerified={handleApproveAllVerified}
+                    selectedEvidenceItem={selectedEvidenceItem}
+                    onSelectEvidenceItem={(item) => setSelectedEvidenceItem(item)}
+                  />
+                )}
+
+                {activeTab === 'handovers' && handoverData && (
+                  <PublicHandoverView
+                    data={handoverData}
+                    onOpenEvidence={(item) => {
+                      setSelectedEvidenceItem(item);
+                      setIsFullDrawerOpen(true);
+                    }}
+                    onBackToDashboard={() => setActiveTab('review')}
+                  />
+                )}
+
+                {activeTab === 'sources' && currentCase && (
+                  <SourcesView
+                    currentCase={currentCase}
+                    sources={sources}
+                    securityFindings={securityFindings}
+                  />
+                )}
+
+                {activeTab === 'settings' && <SettingsView />}
               </div>
             </div>
-          )}
-
-          {/* Views Routing */}
-          <div className="flex-1 pb-16">
-            {activeTab === 'dashboard' && (
-              <DashboardView
-                cases={cases}
-                currentCase={currentCase}
-                metrics={metrics}
-                onSelectCase={(id) => loadCaseDetails(id, true)}
-                onNewHandover={() => setIsNewHandoverOpen(true)}
-                onLoadSample={handleLoadSample}
-                sampleLoading={sampleLoading}
-                onOpenReview={() => setActiveTab('review')}
-                onOpenHandover={() => setActiveTab('handovers')}
-              />
-            )}
-
-            {activeTab === 'project' && currentCase && (
-              <ProjectWorkspaceView
-                currentCase={currentCase}
-                sources={sources}
-                metrics={metrics}
-                onRunExtraction={handleRunExtraction}
-                extracting={extracting}
-                onOpenReview={() => setActiveTab('review')}
-                onOpenHandover={() => setActiveTab('handovers')}
-                onOpenUploadModal={() => setIsNewHandoverOpen(true)}
-              />
-            )}
-
-            {activeTab === 'review' && (
-              <ReviewWorkspaceView
-                items={items}
-                metrics={metrics}
-                onApproveItem={(item) => {
-                  if (item.verification === 'unverified') {
-                    setApprovingUnverifiedItem(item);
-                  } else {
-                    handleItemAction(item.id, 'approve');
-                  }
-                }}
-                onRejectItem={(id) => handleItemAction(id, 'reject')}
-                onEditItem={(item) => setEditingItem(item)}
-                onToggleConfidential={(id) => handleItemAction(id, 'confidential_toggle')}
-                onViewHistory={(item) => setSelectedHistoryItem(item)}
-                onApproveAllVerified={handleApproveAllVerified}
-                selectedEvidenceItem={selectedEvidenceItem}
-                onSelectEvidenceItem={(item) => setSelectedEvidenceItem(item)}
-              />
-            )}
-
-            {activeTab === 'handovers' && handoverData && (
-              <PublicHandoverView
-                data={handoverData}
-                onOpenEvidence={(item) => {
-                  setSelectedEvidenceItem(item);
-                  setIsFullDrawerOpen(true);
-                }}
-                onBackToDashboard={() => setActiveTab('review')}
-              />
-            )}
-
-            {activeTab === 'sources' && currentCase && (
-              <SourcesView
-                currentCase={currentCase}
-                sources={sources}
-                securityFindings={securityFindings}
-              />
-            )}
-
-            {activeTab === 'settings' && <SettingsView />}
           </div>
+
+          {/* Global Modals */}
+          <NewHandoverModal
+            isOpen={isNewHandoverOpen}
+            onClose={() => setIsNewHandoverOpen(false)}
+            onSubmit={handleCreateNewHandover}
+            loading={loading}
+          />
+
+          <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+          <EvidenceDrawer
+            item={isFullDrawerOpen ? selectedEvidenceItem : null}
+            onClose={() => setIsFullDrawerOpen(false)}
+          />
+
+          <VersionHistoryModal
+            item={selectedHistoryItem}
+            onClose={() => setSelectedHistoryItem(null)}
+          />
+
+          <EditItemModal
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onSave={(itemId, updates) => handleItemAction(itemId, 'edit', updates)}
+          />
+
+          <ManualApproveModal
+            item={approvingUnverifiedItem}
+            onClose={() => setApprovingUnverifiedItem(null)}
+            onConfirm={(itemId, note) =>
+              handleItemAction(itemId, 'approve', { manual_verification_note: note })
+            }
+          />
         </div>
-      </div>
-
-      {/* Global Modals */}
-      <NewHandoverModal
-        isOpen={isNewHandoverOpen}
-        onClose={() => setIsNewHandoverOpen(false)}
-        onSubmit={handleCreateNewHandover}
-        loading={loading}
-      />
-
-      <EvidenceDrawer
-        item={isFullDrawerOpen ? selectedEvidenceItem : null}
-        onClose={() => setIsFullDrawerOpen(false)}
-      />
-
-      <VersionHistoryModal
-        item={selectedHistoryItem}
-        onClose={() => setSelectedHistoryItem(null)}
-      />
-
-      <EditItemModal
-        item={editingItem}
-        onClose={() => setEditingItem(null)}
-        onSave={(itemId, updates) => handleItemAction(itemId, 'edit', updates)}
-      />
-
-      <ManualApproveModal
-        item={approvingUnverifiedItem}
-        onClose={() => setApprovingUnverifiedItem(null)}
-        onConfirm={(itemId, note) =>
-          handleItemAction(itemId, 'approve', { manual_verification_note: note })
-        }
-      />
-    </div>
+      )}
+    </>
   );
 }

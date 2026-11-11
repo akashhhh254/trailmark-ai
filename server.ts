@@ -10,6 +10,8 @@ import { LLMAdapter } from './server/llm';
 import { SAMPLE_CASE, SAMPLE_FILES, SAMPLE_CACHED_EXTRACTIONS } from './server/sample_data';
 import { ChunkRecord, ItemRecord, SourceRecord } from './server/types';
 
+import { AuthService } from './server/auth';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +27,21 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 const db = new TrailmarkDatabase();
 const llm = new LLMAdapter();
+const auth = new AuthService(db);
+
+// Helper to extract session token from header or cookie
+function extractToken(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const match = cookieHeader.match(/tm_token=([^;]+)/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
 
 // Initialize Database
 let dbReady = false;
@@ -51,6 +68,209 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     });
   }
   next();
+});
+
+// --- Authentication Endpoints ---
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  const token = extractToken(req);
+  if (!token) {
+    return res.json({ user: null });
+  }
+
+  const payload = auth.verifyToken(token);
+  if (!payload) {
+    return res.json({ user: null });
+  }
+
+  const user = db.getUserById(payload.userId);
+  if (!user) {
+    return res.json({ user: null });
+  }
+
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatar_url: user.avatar_url,
+      auth_provider: user.auth_provider,
+      created_at: user.created_at,
+    },
+  });
+});
+
+app.post('/api/auth/register', (req: Request, res: Response) => {
+  const { name, email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({
+      error: 'Missing credentials',
+      details: 'Email and password are required for registration.',
+      next_step: 'Provide valid email and password.',
+    });
+  }
+
+  try {
+    const { user, token } = auth.registerLocal(name || '', email, password);
+    res.setHeader('Set-Cookie', `tm_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+    res.status(201).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        auth_provider: user.auth_provider,
+        created_at: user.created_at,
+      },
+      token,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({
+      error: 'Registration failed',
+      details: message,
+      next_step: 'Try a different email or sign in.',
+    });
+  }
+});
+
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({
+      error: 'Missing credentials',
+      details: 'Email and password are required.',
+      next_step: 'Enter your registered email and password.',
+    });
+  }
+
+  try {
+    const { user, token } = auth.loginLocal(email, password);
+    res.setHeader('Set-Cookie', `tm_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        auth_provider: user.auth_provider,
+        created_at: user.created_at,
+      },
+      token,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(401).json({
+      error: 'Authentication failed',
+      details: message,
+      next_step: 'Check your password or register for an account.',
+    });
+  }
+});
+
+app.post('/api/auth/demo', (_req: Request, res: Response) => {
+  try {
+    const { user, token } = auth.loginDemoUser();
+    res.setHeader('Set-Cookie', `tm_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        auth_provider: user.auth_provider,
+        created_at: user.created_at,
+      },
+      token,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({
+      error: 'Demo sign-in failed',
+      details: message,
+      next_step: 'Please try again in a moment.',
+    });
+  }
+});
+
+app.get('/api/auth/google/config', (_req: Request, res: Response) => {
+  const config = auth.getGoogleOAuthConfig();
+  res.json({
+    ...config,
+    authUrl: auth.getGoogleAuthUrl(),
+    instructions:
+      'To enable real Google OAuth, configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in environment variables.',
+  });
+});
+
+app.post('/api/auth/google/verify', async (req: Request, res: Response) => {
+  const { email, name, picture, credential } = req.body;
+  if (!email && !credential) {
+    return res.status(400).json({
+      error: 'Missing Google authentication payload',
+      details: 'Google ID token credential or profile email required.',
+      next_step: 'Click Continue with Google to authenticate.',
+    });
+  }
+
+  try {
+    let profileEmail = email;
+    let profileName = name;
+    let profilePic = picture;
+
+    // If credential was provided as JWT from Google Identity Services, decode payload
+    if (credential) {
+      try {
+        const parts = credential.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          profileEmail = payload.email || profileEmail;
+          profileName = payload.name || profileName;
+          profilePic = payload.picture || profilePic;
+        }
+      } catch (e) {
+        console.warn('Could not decode credential token parts:', e);
+      }
+    }
+
+    if (!profileEmail) {
+      return res.status(400).json({
+        error: 'Invalid Google account details',
+        details: 'Could not extract email address from Google authentication response.',
+        next_step: 'Verify account permissions.',
+      });
+    }
+
+    const { user, token } = await auth.handleGoogleAuth({
+      email: profileEmail,
+      name: profileName || profileEmail.split('@')[0],
+      picture: profilePic,
+    });
+
+    res.setHeader('Set-Cookie', `tm_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`);
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatar_url: user.avatar_url,
+        auth_provider: user.auth_provider,
+        created_at: user.created_at,
+      },
+      token,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({
+      error: 'Google authentication failed',
+      details: message,
+      next_step: 'Try logging in with email or use Demo mode.',
+    });
+  }
+});
+
+app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  res.setHeader('Set-Cookie', 'tm_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  res.json({ status: 'ok', message: 'Logged out successfully' });
 });
 
 // --- Sample Project Generator ---

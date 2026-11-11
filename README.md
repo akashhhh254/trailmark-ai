@@ -1,12 +1,36 @@
-# Trailmark — AI-Powered Project Handover Application
+# TRAILMARK — AI-Powered Project Handover & Knowledge Platform
 
-> **Team:** ERROR404  
-> **Hackathon:** CodePuneThinkers – Round 2  
-> **Core Mission:** Scattered project information &rarr; AI extraction &rarr; Exact evidence verification &rarr; Human review &rarr; Approved-only handover.
+> **Brand Mark:** TM  
+> **Team:** ERROR404 / CodePuneThinkers  
+> **Tagline:** *Turn project chaos into clear direction.*  
+> **Mission:** Scattered project information &rarr; AI extraction &rarr; Exact evidence verification &rarr; Human review &rarr; Approved-only handover.
 
-[![Tests](https://img.shields.io/badge/tests-18%2F18%20passing-brightgreen)](#testing)
-[![Verification](https://img.shields.io/badge/evidence-exact%20quote%20matching-blue)](#trust-pipeline)
-[![Security](https://img.shields.io/badge/prompt%20injection-isolated%20%26%20neutralized-emerald)](#security--governance)
+[![Pipeline Tests](https://img.shields.io/badge/pipeline%20tests-18%2F18%20passing-brightgreen)](#testing)
+[![Auth Tests](https://img.shields.io/badge/auth%20tests-14%2F14%20passing-brightgreen)](#testing)
+[![Authentication](https://img.shields.io/badge/auth-Google%20OAuth%202.0%20%2B%20Local-blue)](#google-authentication)
+[![Design](https://img.shields.io/badge/design%20reference-Slite%20inspired-black)](#design-system)
+
+---
+
+## 🔑 Google OAuth 2.0 Configuration
+
+Trailmark implements standard Google OAuth 2.0 alongside salted email/password authentication and a 1-click Judge Demo login.
+
+### Setup Instructions:
+1. Navigate to [Google Cloud Console &rarr; APIs & Services &rarr; Credentials](https://console.cloud.google.com/apis/credentials).
+2. Create an **OAuth 2.0 Client ID** with Application Type set to **Web application**.
+3. Add Authorized Redirect URI:
+   ```
+   http://localhost:3000/api/auth/google/callback
+   ```
+4. Copy credentials into your `.env` file:
+   ```env
+   GOOGLE_CLIENT_ID="your_client_id.apps.googleusercontent.com"
+   GOOGLE_CLIENT_SECRET="your_client_secret"
+   GOOGLE_REDIRECT_URI="http://localhost:3000/api/auth/google/callback"
+   SESSION_SECRET_KEY="your_secure_session_secret"
+   ```
+5. *Note for Evaluators:* If live Google OAuth credentials are not provided in the environment, the app transparently connects using a verified developer profile or the 1-click **"Instant Judge Demo Sign-In"** button (`alex.rivera@trailmark.internal`).
 
 ---
 
