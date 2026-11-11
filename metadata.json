@@ -1,0 +1,6 @@
+{
+  "name": "Trailmark",
+  "description": "AI-powered project handover application with evidence-linked quote verification and human review.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
