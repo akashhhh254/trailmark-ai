@@ -1,8 +1,17 @@
 # Trailmark — Changelog
 
-## [2.0.0] - 2026-11-11 (CodePuneThinkers — Round 2 Release)
+## [2.1.0] - 2026-11-11 (Slite Visual & UX Redesign)
 
 ### Added
+- **Slite SaaS Shell:**
+  - Minimalist collapsible left navigation sidebar (`Overview`, `Project Workspace`, `Review Queue`, `All Handovers`, `Sources & Chunks`, `Settings`).
+  - Slite-inspired breadcrumb header with project selector and quick actions.
+  - Dedicated Overview Dashboard with welcome narrative, quickstart paths, metrics grid, and project table.
+  - Project Workspace hub detailing leaver/successor stakeholders, source file management, and extraction triggers.
+  - Slite 2-column Review Workspace featuring clean unboxed card items on the left and a persistent sticky Source Evidence Inspector on the right with yellow quote highlighting.
+  - Dedicated Sources & Chunks view with raw text explorer and security inspection findings.
+  - Refined document-style Public Handover page matching Slite's paper reading experience with Markdown export.
+  - Minimalist `NewHandoverModal` for creating cases and uploading files from anywhere in the app.
 - **Core Engine & Architecture:**
   - Deterministic chunking engine preserving exact source line numbers (`start_line`, `end_line`) with stable IDs (`S1:L1-18`).
   - Specialized CSV chunking with header repetition across row batches.
